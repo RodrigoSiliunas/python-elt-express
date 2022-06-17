@@ -1,8 +1,9 @@
+from msilib.schema import Error
 from time import sleep
 from termcolor import colored
 from datetime import datetime
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from app.packages import RequestExpress, MailExpress
@@ -26,9 +27,8 @@ def insert_data_on_table(sleep_time: int = 1):
     )
 
     while True:
-        if (datetime.now().hour == 9):
+        if (datetime.now().hour == 17):
             try:
-                raise Exception
                 date = f'{datetime.now().day}/{datetime.now().month:02d}/{datetime.now().year}'
 
                 print(
@@ -39,7 +39,7 @@ def insert_data_on_table(sleep_time: int = 1):
                 request = RequestExpress(
                     'qi7nsdzyTU3FRo1MA5MYLFgboVLPz9tHShybLesgUeA-Q5rxwytAWw'
                 )
-                response = request.get_template_from_date(413, date, date)
+                response = request.get_template_from_date(date, date).json()
 
                 try:
                     print(
@@ -52,18 +52,12 @@ def insert_data_on_table(sleep_time: int = 1):
                     # After that we add the new class Coleta to the database, commit and close the cursor.
                     for item in response:
                         with Session(engine) as session:
-                            collect = Coleta(
-                                esl_id=item['id'],
-                                invoices_mapping=item['invoices_mapping'],
-                                sequence_code=item['fit_ant_sequence_code'],
-                                delivery_prediction=item['fit_dpn_delivery_prediction_at'],
-                                foe_reciver=item['fit_fte_foe_receiver'],
-                                foe_ore_description=item['fit_fte_foe_ore_description'],
-                                lce_ore_description=item['fit_fte_lce_ore_description'],
-                                fis_id=item['fit_fis_id'],
-                                ioe_order_number=item['fit_fis_ioe_order_number'],
-                                ioe_pin_number=item['fit_fis_ioe_pin_number'],
-                            )
+                            esl_id = item['id']
+                            item['esl_id'] = esl_id
+                            del item['id']
+
+
+                            collect = Coleta(**item)
 
                             session.add(collect)
                             session.commit()
@@ -83,7 +77,7 @@ def insert_data_on_table(sleep_time: int = 1):
                         f'✔️ {colored("SUCESSO:", "green")} O banco de dados foi atualizado com sucesso.\n'
                         f'Um email informativo foi disparado ao operador. Próxima atualização no mesmo horário amanhã.\n'
                     )
-                except:
+                except Exception as e:
                     # Todo: Send a mail notification for this error.
                     subject = 'Falha na Atualização: Banco de Dados'
                     message = 'Ocorreu um erro na atualização do banco de dados da empresa. Comunique o setor de TI.'
@@ -99,6 +93,8 @@ def insert_data_on_table(sleep_time: int = 1):
                         f'🚫 {colored("ATENÇÃO:", "red")} Ocorreu um erro durante a execução da atualização diária do banco de dados.\n'
                         f'Um {colored("E-MAIL", "green")} acaba de ser enviado para o operador informando o ocorrido.\n'
                     )
+
+                    print(e)
             except:
                 subject = 'Falha na requisição dos dados da ESL'
                 message = 'Bom dia. A requisição aos dados da ESL falhou.\n' \
@@ -115,7 +111,6 @@ def insert_data_on_table(sleep_time: int = 1):
                     f'🚫 {colored("ATENÇÃO:", "red")} Um erro ocorreu na requisição dos dados.\n'
                     f'Problema com o {colored("ESL", "blue")}. Informar ao setor de TI.\n'
                 )
-
 
         # The process will sleep after verify if is the hour of the insertion.
         sleep(sleep_time * 60 * 60)
