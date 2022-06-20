@@ -1,3 +1,5 @@
+from sqlalchemy import engine
+
 
 class Config:
     pass
@@ -8,4 +10,10 @@ class DevelopmentConfig(Config):
 
 
 class ProductionConfig(Config):
-    pass
+    DATABASE_URI = engine.URL.create(
+        drivername="mysql",
+        username="root",
+        password="",
+        host="localhost",
+        database=""
+    )
