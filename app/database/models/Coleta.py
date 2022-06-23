@@ -66,8 +66,18 @@ class Coleta(DeclarativeBase.Model):
     fit_sdr_mds_cty_name                    = Column(String(150))
     fit_sdr_mds_cty_sae_code                = Column(String(150))
     fit_vee_name                            = Column(String(150))
-    fit_fis_id                              = Column(Integer, unique=True)
+    fit_fis_id                              = Column(Integer)
+    fit_pyr_nickname                        = Column(String(150))
 
+    def _keys(self):
+        return (name for name in dir(self) if not name.startswith('_'))
 
-    def to_json(self):
-        return dict(name=self.name, slug=self.slug, count=self.count)
+    def _values(self):
+        return (getattr(self, name) for name in self)
+
+    def _items(self):
+        return ((name, getattr(self, name)) for name in self)
+
+    def to_dict(self):
+        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+

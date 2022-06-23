@@ -2,7 +2,7 @@ from termcolor import colored
 from datetime import datetime
 from calendar import monthrange
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, update
 from sqlalchemy.orm import Session
 
 from app.packages import RequestExpress, MailExpress
@@ -38,13 +38,13 @@ def insert_data_on_table():
         )
         response = request.get_template_from_date(date)
 
-        try:
-            print(
-                f'⚠️ {colored("ATENÇÃO:", "red")} Requisição dos dados do {colored("ESL", "blue")} efetuada com sucesso. '
-                f'Executaremos o update diário do banco de dados com os relatórios.\n'
-                f'{colored("Pode ocorrer microlentidão ou travamentos durante o processo", "red")}.\n'
-            )
+        print(
+            f'⚠️ {colored("ATENÇÃO:", "red")} Requisição dos dados do {colored("ESL", "blue")} efetuada com sucesso. '
+            f'Executaremos o update diário do banco de dados com os relatórios.\n'
+            f'{colored("Pode ocorrer microlentidão ou travamentos durante o processo", "red")}.\n'
+        )
 
+        try:
             # For every item who is inside response we create a new class<Model> Coleta and insert informations who is into data.
             # After that we add the new class Coleta to the database, commit and close the cursor.
             for item in response:
@@ -53,8 +53,18 @@ def insert_data_on_table():
                     del item['id']
 
                     collect = Coleta(**item)
+                    collect_exists = session.query(Coleta).filter_by(
+                        fit_fis_id=item['fit_fis_id']).first()
 
-                    session.add(collect)
+                    if collect_exists:
+                        values = collect.to_dict()
+                        del values['id']
+
+                        smtp = update(Coleta).where(Coleta.fit_fis_id == item['fit_fis_id']).values(values)
+                        session.execute(smtp)
+                    else:
+                        session.add(collect)
+
                     session.commit()
 
             # Todo: Send a mail notification for the operador informing about the success of this operation.
@@ -148,8 +158,18 @@ def insert_all_data_on_table():
                             del item['id']
 
                             collect = Coleta(**item)
+                            collect_exists = session.query(Coleta).filter_by(
+                                fit_fis_id=item['fit_fis_id']).first()
 
-                            session.add(collect)
+                            if collect_exists:
+                                values = collect.to_dict()
+                                del values['id']
+
+                                smtp = update(Coleta).where(Coleta.fit_fis_id == item['fit_fis_id']).values(values)
+                                session.execute(smtp)
+                            else:
+                                session.add(collect)
+
                             session.commit()
 
                     # Todo: Send a mail notification for the operador informing about the success of this operation.
