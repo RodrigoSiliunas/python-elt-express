@@ -6,7 +6,7 @@ class Config:
 
 
 class DevelopmentConfig(Config):
-    DATABASE_URI = 'mysql://root:@localhost/teste_mysql'
+    DATABASE_URI = 'mysql://root:@localhost/pythonetlexpress'
 
 
 class ProductionConfig(Config):
