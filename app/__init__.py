@@ -3,14 +3,15 @@ from datetime import datetime
 from calendar import monthrange
 
 from sqlalchemy import create_engine, update
+from sqlalchemy.sql import text
 from sqlalchemy.orm import Session
 
 from app.packages import RequestExpress, MailExpress
 from app.database.models import Coleta, DeclarativeBase
 
-from app.configurations import DevelopmentConfig
+from app.configurations import ProductionConfig
 
-engine = create_engine(DevelopmentConfig.DATABASE_URI)
+engine = create_engine(ProductionConfig.DATABASE_URI)
 
 
 def init_db():
@@ -52,19 +53,51 @@ def insert_data_on_table():
                     item['esl_id'] = item['id']
                     del item['id']
 
-                    collect = Coleta(**item)
-                    collect_exists = session.query(Coleta).filter_by(
-                        fit_fis_id=item['fit_fis_id']).first()
+                    try:
+                        collect = Coleta(**item)
+                        collect_exists = session.query(Coleta).filter_by(
+                            fit_fis_id=item['fit_fis_id']).first()
 
-                    if collect_exists:
-                        values = collect.to_dict()
-                        del values['id']
+                        if collect_exists:
+                            values = collect.to_dict()
+                            del values['id']
+                            smtp = update(Coleta).where(
+                                Coleta.fit_fis_id == item['fit_fis_id']).values(values)
+                            session.execute(smtp)
+                        else:
+                            session.add(collect)
+                    except:
+                        fields_who_not_exists = [
+                            field for field in item if field not in Coleta()._keys()]
 
-                        smtp = update(Coleta).where(Coleta.fit_fis_id == item['fit_fis_id']).values(values)
-                        session.execute(smtp)
-                    else:
-                        session.add(collect)
+                        for field in fields_who_not_exists:
+                            Coleta()._add_column(field, item[field])
 
+                            if type(item[field]) is str:
+                                session.query(
+                                    text(f'ALTER TABLE coletas'
+                                        f'ADD COLUMN {field} varchar(150);')
+                                )
+                            else:
+                                session.query(
+                                    text(f'ALTER TABLE coletas'
+                                        f'ADD COLUMN {field} int;')
+                                )
+
+                        collect = Coleta(**item)
+                        collect_exists = session.query(Coleta).filter_by(
+                            fit_fis_id=item['fit_fis_id']).first()
+
+                        if collect_exists:
+                            values = collect.to_dict()
+                            del values['id']
+                            smtp = update(Coleta).where(
+                                Coleta.fit_fis_id == item['fit_fis_id']).values(values)
+                            session.execute(smtp)
+                        else:
+                            session.add(collect)
+
+                    # Final da lógica do for.
                     session.commit()
 
             # Todo: Send a mail notification for the operador informing about the success of this operation.
