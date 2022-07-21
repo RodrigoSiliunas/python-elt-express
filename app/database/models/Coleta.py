@@ -67,8 +67,12 @@ class Coleta(DeclarativeBase.Model):
     fit_sdr_mds_cty_name                    = Column(String(150))
     fit_sdr_mds_cty_sae_code                = Column(String(150))
     fit_vee_name                            = Column(String(150))
-    fit_fis_id                              = Column(Integer)
+    fit_fis_id                              = Column(Integer, unique=True)
     fit_pyr_nickname                        = Column(String(150))
+    fit_rir_nickname                        = Column(String(150))
+    fit_p_m_pck_mik_mft_sequence_code       = Column(String(150))
+    fit_rir_document                        = Column(String(150))
+    fit_rir_code                            = Column(String(150))
 
     @classmethod
     def _add_column(cls, column, value):
