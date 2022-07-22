@@ -69,8 +69,7 @@ class Coleta(DeclarativeBase.Model):
     fit_vee_name                            = Column(String(150))
     fit_fis_id                              = Column(Integer, unique=True)
     fit_pyr_nickname                        = Column(String(150))
-    fit_rir_nickname                        = Column(String(150))
-    fit_p_m_pck_mik_mft_sequence_code       = Column(String(150))
+    fit_p_m_pck_mik_mft_sequence_code       = Column(Integer)
     fit_rir_document                        = Column(String(150))
     fit_rir_code                            = Column(String(150))
 

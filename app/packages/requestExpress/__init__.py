@@ -1,4 +1,8 @@
+from concurrent.futures import ProcessPoolExecutor
 import requests
+
+import multiprocessing
+from concurrent.futures.process import ProcessPoolExecutor as Executor
 
 
 class RequestExpress:
@@ -21,9 +25,7 @@ class RequestExpress:
 
         return response
 
-    def get_template_from_date(self, date: str) -> requests.Response:
-        response_arr = []
-
+    def get_template_from_date(self, date: str):
         data = {
             "search": {
                 "freights": {
@@ -33,6 +35,8 @@ class RequestExpress:
             "page": 1,
             "per": 100
         }
+
+        response_arr = []
 
         response = requests.get(
             f'{self.base_url}/api/analytics/reports/929/data', json=data, headers=self.headers).json()
@@ -46,6 +50,7 @@ class RequestExpress:
             data['page'] += 1
 
         return response_arr
+
 
     def get_template_from_date_to_date(self, from_date: str, to_date: str) -> requests.Response:
         response_arr = []

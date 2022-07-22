@@ -1,4 +1,3 @@
-import os
 from termcolor import colored
 from datetime import datetime
 from calendar import monthrange
@@ -12,11 +11,131 @@ from app.database.models import Coleta, DeclarativeBase
 
 from app.configurations import DevelopmentConfig
 
+import multiprocessing
+from concurrent.futures.process import ProcessPoolExecutor as Executor
+
+
 engine = create_engine(DevelopmentConfig.DATABASE_URI)
 
 
 def init_db():
     DeclarativeBase.Model.metadata.create_all(bind=engine)
+
+
+def insert_process(response):
+    row_added_count, row_edited_count, row_error_count = 0, 0, 0
+
+    for item in response:
+        with Session(engine) as session:
+            item['esl_id'] = item['id']
+            del item['id']
+
+            try:
+                collect = Coleta(**item)
+            except:
+                fields_who_not_exists = [
+                    field for field in item if field not in Coleta()._keys()]
+
+                for field in fields_who_not_exists:
+                    Coleta()._add_column(field, item[field])
+
+                    if type(item[field]) is str:
+                        session.query(
+                            text(f'ALTER TABLE coletas'
+                                 f'ADD COLUMN {field} VARCHAR(150) DEFAULT NULL;')
+                        )
+                    else:
+                        session.query(
+                            text(f'ALTER TABLE coletas'
+                                 f'ADD COLUMN {field} INT DEFAULT NULL;')
+                        )
+
+                collect = Coleta(**item)
+
+            fit_fis_id_exists = session.query(Coleta).filter_by(
+                fit_fis_id=item['fit_fis_id']).first()
+            esl_id_exists = session.query(Coleta).filter_by(
+                esl_id=item['esl_id']).first()
+
+            # Se o campo FIT_FIS_ID for 'NULL' E existir o número ESL_ID desse item no banco de dados, então atualizamos com as informações do item onde ESL_ID for igual a ESL_ID;
+            if ((item['fit_fis_ioe_number'] is None) or (item['fit_fis_ioe_number'] == "")):
+                values = collect.to_dict()
+                del values['id']
+
+                if (esl_id_exists):
+                    smtp = update(Coleta).where(
+                        Coleta.esl_id == item['esl_id']).values(values)
+                    session.execute(smtp)
+
+                    row_edited_count += 1
+                    continue
+
+            # Se no banco de dados existir um número igual ao FIT_FIS_ID do item, então atualizamos com o valor desse novo item declarado onde o FIT_FIS_ID for igual a FIT_FIS_ID;
+            if ((fit_fis_id_exists) and (item['fit_fis_id'] != None) and (item['fit_fis_id'] != '')):
+                values = collect.to_dict()
+                del values['id']
+
+                smtp = update(Coleta).where(
+                    Coleta.fit_fis_id == item['fit_fis_id']).values(values)
+                [session.execute(smtp), session.close()]
+
+                row_edited_count += 1
+                continue
+
+            try:
+
+                row_added_count += 1
+                [session.add(collect), session.commit()]
+            except Exception as e:
+                row_error_count += 1
+
+                if ((row_error_count % 10) == 0):
+                    print(
+                        f'❌ Um erro foi encontrado ao tentar inserir uma linha no banco de dados;\nUm total de {colored(f"{row_error_count}", "red")} foram encontrados até agora.\nCausa do erro: {colored(f"{e.__cause__}", "red")}\n')
+
+    print(
+        f'✅ Um total de {colored(f"{row_added_count}", "green")} novas linhas foram adicionadas ao banco de dados;')
+    print(
+        f'♻️ Um total de {colored(f"{row_edited_count}", "blue")} linhas passaram por um update no banco de dados;')
+    print(
+        f'❌ Um total de {colored(f"{row_error_count}", "red")} erros ocorreram ao tentar inserir novos items.')
+
+
+def insert_from_date(date: str):
+    lock = multiprocessing.RLock()
+
+    print(
+        f'\n⚠️ {colored("ATENÇÃO:", "red")} Início do processo de atualização do banco de dados.\n'
+        f'Fazendo a requisição ao {colored("ESL", "blue")} dos dados do dia {colored(date, "green")}.\n'
+    )
+
+    try:
+        request = RequestExpress(
+            'qi7nsdzyTU3FRo1MA5MYLFgboVLPz9tHShybLesgUeA-Q5rxwytAWw'
+        )
+        response = request.get_template_from_date(date)
+
+        print(
+            f'⚠️ {colored("ATENÇÃO:", "red")} Requisição dos dados do {colored("ESL", "blue")} efetuada com sucesso. '
+            f'Executaremos o update diário do banco de dados com os relatórios.\n'
+            f'{colored("Pode ocorrer microlentidão ou travamentos durante o processo", "red")}.\n'
+        )
+    except:
+        print(
+            f'🚫 {colored("ATENÇÃO:", "red")} Ocorreu um erro durante a execução da atualização diária do banco de dados.\n'
+            f'Um {colored("E-MAIL", "green")} acaba de ser enviado para o operador informando o ocorrido.\n'
+        )
+        return False
+
+    # For every item who is inside response we create a new class<Model> Coleta and insert informations who is into data.
+    # After that we add the new class Coleta to the database, commit and close the cursor.
+    number_of_cores = multiprocessing.cpu_count()
+
+    with lock:
+        with Executor(max_workers=number_of_cores) as executor:
+            executor.submit(insert_process, response)
+
+
 
 
 def insert_data_without_update(from_date: str, to_date: str):
@@ -97,10 +216,12 @@ def insert_data_without_update(from_date: str, to_date: str):
 
 def insert_from_data_to_data(from_date: str, to_date: str):
     print(
-        f'⚠️ {colored("ATENÇÃO:", "red")} Início do processo de atualização do banco de dados.\n'
+        f'\n⚠️ {colored("ATENÇÃO:", "red")} Início do processo de atualização do banco de dados.\n'
         f'Fazendo a requisição ao {colored("ESL", "blue")} dos dados de {colored(from_date, "green")} até '
         f'{colored(to_date, "green")}.\n'
     )
+
+    start = datetime.now()
 
     try:
         request = RequestExpress(
@@ -186,7 +307,7 @@ def insert_from_data_to_data(from_date: str, to_date: str):
                 [session.add(collect), session.commit()]
 
                 if ((row_added_count % 10) == 0):
-                    os.system('clear||cls')
+                    # os.system('clear||cls')
 
                     print(
                         f'⌛ Foram adicionadas um total de {colored(f"{row_added_count}", "green")} linhas no banco de dados até agora;\nAguarde até o final da execução do programa;\n')
@@ -202,7 +323,10 @@ def insert_from_data_to_data(from_date: str, to_date: str):
     print(
         f'♻️ Um total de {colored(f"{row_edited_count}", "blue")} linhas passaram por um update no banco de dados;')
     print(
-        f'❌ Um total de {colored(f"{row_error_count}", "red")} erros ocorreram ao tentar inserir novos items.')
+        f'❌ Um total de {colored(f"{row_error_count}", "red")} erros ocorreram ao tentar inserir novos items;')
+    print(
+        f'⌛ A execução do processo durou um total de {(datetime.now() - start):.2f} segundos.')
+
 
 
 def insert_data_on_table():
@@ -442,3 +566,13 @@ def insert_all_data_on_table():
             f'🚫 {colored("ATENÇÃO:", "red")} Um erro ocorreu na requisição dos dados.\n'
             f'Problema com o {colored("ESL", "blue")}. Informar ao setor de TI.\n'
         )
+
+
+def insert_all_data_without_email():
+    for month in range(2, datetime.now().month + 1):
+        mounth_days = monthrange(2022, month)[1]
+
+        for day in range(8, mounth_days + 1):
+            date = f'{day:02d}/{month:02d}/{datetime.now().year}'
+
+            insert_from_date(date)
